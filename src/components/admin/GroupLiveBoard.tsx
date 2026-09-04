@@ -8,13 +8,20 @@ import {
   BookOpen, 
   MoveRight,
   UserMinus,
-  UserPlus
+  UserPlus,
+  UserX
 } from 'lucide-react';
 import { Input, Button, Modal, Select, Popconfirm, Tooltip } from 'antd';
 import { AddMemberToGroupModal } from '@/components/modals/AddMemberToGroupModal';
 
 export const GroupLiveBoard: React.FC = () => {
-  const { activeRoom, updateSubGroupTopic, manualMoveParticipant, removeParticipant } = useGroup();
+  const { 
+    activeRoom, 
+    updateSubGroupTopic, 
+    manualMoveParticipant, 
+    removeParticipant, 
+    removeParticipantFromSubGroup 
+  } = useGroup();
   const [editingTopicId, setEditingTopicId] = useState<string | null>(null);
   const [tempTopic, setTempTopic] = useState('');
 
@@ -26,6 +33,7 @@ export const GroupLiveBoard: React.FC = () => {
   } | null>(null);
   const [targetSubGroupId, setTargetSubGroupId] = useState<string>('');
   const [removingUid, setRemovingUid] = useState<string | null>(null);
+  const [unassigningUid, setUnassigningUid] = useState<string | null>(null);
   const [addingToGroup, setAddingToGroup] = useState<SubGroup | null>(null);
 
   if (!activeRoom) return null;
@@ -58,6 +66,15 @@ export const GroupLiveBoard: React.FC = () => {
       await removeParticipant(activeRoom.id, uid);
     } finally {
       setRemovingUid(null);
+    }
+  };
+
+  const handleRemoveFromSubGroup = async (subGroupId: string, uid: string) => {
+    setUnassigningUid(uid);
+    try {
+      await removeParticipantFromSubGroup(activeRoom.id, subGroupId, uid);
+    } finally {
+      setUnassigningUid(null);
     }
   };
 
@@ -172,6 +189,24 @@ export const GroupLiveBoard: React.FC = () => {
                             <MoveRight className="w-3.5 h-3.5" />
                           </button>
                         </Tooltip>
+
+                        {/* Remove from SubGroup Button (Keeps in room as unassigned) */}
+                        <Popconfirm
+                          title="Keluarkan dari Kelompok?"
+                          description={`Keluarkan ${member.fullName} dari ${grp.name}? Peserta akan berstatus belum berkelompok dan tetap ada di kelas/grup ini.`}
+                          onConfirm={() => handleRemoveFromSubGroup(grp.id, member.uid)}
+                          okText="Ya, Keluarkan dari Kelompok"
+                          cancelText="Batal"
+                        >
+                          <Tooltip title="Keluarkan dari Kelompok Ini">
+                            <button
+                              disabled={unassigningUid === member.uid}
+                              className="text-slate-400 hover:text-amber-600 p-1.5 rounded hover:bg-amber-50 transition-all"
+                            >
+                              <UserX className="w-3.5 h-3.5" />
+                            </button>
+                          </Tooltip>
+                        </Popconfirm>
 
                         {/* Kick / Remove Participant Button */}
                         <Popconfirm

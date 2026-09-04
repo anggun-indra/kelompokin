@@ -41,6 +41,7 @@ interface GroupContextType {
   updateSubGroupTopic: (roomId: string, subGroupId: string, topic: string) => Promise<void>;
   manualMoveParticipant: (roomId: string, participantUid: string, fromSubGroupId: string, toSubGroupId: string) => Promise<boolean>;
   addParticipantToSubGroup: (roomId: string, subGroupId: string, participantUid: string, userProfile?: UserProfile) => Promise<{ success: boolean; error?: string }>;
+  removeParticipantFromSubGroup: (roomId: string, subGroupId: string, participantUid: string) => Promise<boolean>;
   exportRoomToExcel: (room: Room) => void;
   resetRoomGroups: (roomId: string) => Promise<void>;
 }
@@ -908,7 +909,97 @@ export const GroupProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
-  // 15. EXPORT TO EXCEL
+  // 15. REMOVE PARTICIPANT FROM SUBGROUP (Unassign from subgroup without removing from room)
+  const removeParticipantFromSubGroup = async (
+    roomId: string,
+    subGroupId: string,
+    participantUid: string
+  ): Promise<boolean> => {
+    try {
+      let room = rooms.find(r => r.id === roomId);
+      if (db && db.app) {
+        const snap = await getDoc(doc(db, 'rooms', roomId)).catch(() => null);
+        if (snap && snap.exists()) {
+          room = snap.data() as Room;
+        }
+      }
+
+      if (!room) {
+        message.error('Grup tidak ditemukan.');
+        return false;
+      }
+
+      const targetGroup = room.subGroups.find(g => g.id === subGroupId);
+      if (!targetGroup) {
+        message.error('Kelompok tidak ditemukan.');
+        return false;
+      }
+
+      const participant = targetGroup.members.find(
+        m => m.uid === participantUid || (m.email && m.email.toLowerCase() === participantUid.toLowerCase())
+      );
+      const participantName = participant ? participant.fullName : 'Peserta';
+
+      // 1. Remove from subgroup members
+      const updatedSubGroups = room.subGroups.map(sg => {
+        if (sg.id === subGroupId) {
+          return {
+            ...sg,
+            members: sg.members.filter(
+              m => m.uid !== participantUid && (m.email ? m.email.toLowerCase() !== participantUid.toLowerCase() : true)
+            ),
+          };
+        }
+        return sg;
+      });
+
+      // 2. Reset subGroupId & subGroupNumber in room.participants
+      const updatedParticipants = (room.participants || []).map(p => {
+        if (p.uid === participantUid || (p.email && p.email.toLowerCase() === participantUid.toLowerCase())) {
+          return {
+            ...p,
+            subGroupId: null,
+            subGroupNumber: null,
+          };
+        }
+        return p;
+      });
+
+      // 3. Clean up any active swap codes created by this participant in this room
+      if (db && db.app && participant) {
+        const q = query(
+          collection(db, 'swap_codes'),
+          where('roomId', '==', roomId),
+          where('creatorUid', '==', participant.uid)
+        );
+        getDocs(q).then((snap) => {
+          snap.forEach((d) => deleteDoc(doc(db, 'swap_codes', d.id)).catch(console.warn));
+        }).catch(console.warn);
+      }
+
+      const updatedRoom: Room = {
+        ...room,
+        subGroups: updatedSubGroups,
+        participants: updatedParticipants,
+        updatedAt: new Date().toISOString(),
+      };
+
+      setRooms(prev => prev.map(r => r.id === roomId ? updatedRoom : r));
+
+      if (db && db.app) {
+        await setDoc(doc(db, 'rooms', roomId), updatedRoom).catch(console.warn);
+      }
+
+      message.success(`${participantName} berhasil dikeluarkan dari ${targetGroup.name}.`);
+      return true;
+    } catch (err: any) {
+      console.error('Error removing participant from subgroup:', err);
+      message.error('Gagal mengeluarkan peserta dari kelompok.');
+      return false;
+    }
+  };
+
+  // 16. EXPORT TO EXCEL
   const exportRoomToExcel = (room: Room) => {
     try {
       const rows: any[] = [];
@@ -997,6 +1088,7 @@ export const GroupProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         updateSubGroupTopic,
         manualMoveParticipant,
         addParticipantToSubGroup,
+        removeParticipantFromSubGroup,
         exportRoomToExcel,
         resetRoomGroups,
       }}

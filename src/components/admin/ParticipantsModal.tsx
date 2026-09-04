@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Modal, Input, Button, Popconfirm, Tooltip, Select } from 'antd';
 import { Room } from '@/types';
 import { useGroup } from '@/contexts/GroupContext';
-import { Users, Search, UserMinus, Trash2 } from 'lucide-react';
+import { Users, Search, UserMinus, Trash2, UserX } from 'lucide-react';
 
 interface ParticipantsModalProps {
   open: boolean;
@@ -11,10 +11,16 @@ interface ParticipantsModalProps {
 }
 
 export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({ open, onClose, room }) => {
-  const { removeParticipant, kickAllParticipants, addParticipantToSubGroup } = useGroup();
+  const { 
+    removeParticipant, 
+    kickAllParticipants, 
+    addParticipantToSubGroup,
+    removeParticipantFromSubGroup 
+  } = useGroup();
   const [search, setSearch] = useState('');
   const [removingUid, setRemovingUid] = useState<string | null>(null);
   const [assigningUid, setAssigningUid] = useState<string | null>(null);
+  const [unassigningUid, setUnassigningUid] = useState<string | null>(null);
 
   const getSubGroupName = (uid: string) => {
     for (const sg of room.subGroups) {
@@ -151,13 +157,48 @@ export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({ open, onCl
                         }))}
                       />
                     ) : (
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                        groupName !== 'Belum Diacak'
-                          ? 'bg-indigo-50 text-indigo-800 border border-indigo-200'
-                          : 'bg-slate-100 text-slate-500'
-                      }`}>
-                        {groupName}
-                      </span>
+                      <div className="flex items-center space-x-1">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          groupName !== 'Belum Diacak'
+                            ? 'bg-indigo-50 text-indigo-800 border border-indigo-200'
+                            : 'bg-slate-100 text-slate-500'
+                        }`}>
+                          {groupName}
+                        </span>
+
+                        {groupName !== 'Belum Diacak' && (
+                          <Popconfirm
+                            title="Keluarkan dari Kelompok?"
+                            description={`Keluarkan ${p.fullName} dari ${groupName}? Peserta akan tetap berada di kelas/grup ini dengan status belum memiliki kelompok.`}
+                            onConfirm={async () => {
+                              const sg = room.subGroups.find(g => 
+                                g.members.some(m => m.uid === p.uid || (m.email && p.email && m.email.toLowerCase() === p.email.toLowerCase()))
+                              );
+                              if (!sg) return;
+                              setUnassigningUid(p.uid);
+                              try {
+                                await removeParticipantFromSubGroup(room.id, sg.id, p.uid);
+                              } finally {
+                                setUnassigningUid(null);
+                              }
+                            }}
+                            okText="Keluarkan"
+                            cancelText="Batal"
+                            okButtonProps={{ danger: true }}
+                          >
+                            <Tooltip title={`Keluarkan dari ${groupName} (Jadikan belum berkelompok)`}>
+                              <Button
+                                type="text"
+                                size="small"
+                                loading={unassigningUid === p.uid}
+                                className="flex items-center justify-center w-6 h-6 p-0 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded"
+                              >
+                                <UserX className="w-3 h-3" />
+                              </Button>
+                            </Tooltip>
+                          </Popconfirm>
+                        )}
+                      </div>
                     )}
 
                     <Popconfirm
