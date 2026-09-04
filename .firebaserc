@@ -1,0 +1,14 @@
+{
+  "projects": {
+    "default": "undhi-lms"
+  },
+  "targets": {
+    "undhi-lms": {
+      "hosting": {
+        "kelompokin": [
+          "kelompokin"
+        ]
+      }
+    }
+  }
+}
