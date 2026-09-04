@@ -40,7 +40,7 @@ interface GroupContextType {
   executeSwapWithCode: (roomId: string, codeStr: string, user: UserProfile) => Promise<{ success: boolean; error?: string; message?: string }>;
   updateSubGroupTopic: (roomId: string, subGroupId: string, topic: string) => Promise<void>;
   manualMoveParticipant: (roomId: string, participantUid: string, fromSubGroupId: string, toSubGroupId: string) => Promise<boolean>;
-  addParticipantToSubGroup: (roomId: string, subGroupId: string, participantUid: string) => Promise<{ success: boolean; error?: string }>;
+  addParticipantToSubGroup: (roomId: string, subGroupId: string, participantUid: string, userProfile?: UserProfile) => Promise<{ success: boolean; error?: string }>;
   exportRoomToExcel: (room: Room) => void;
   resetRoomGroups: (roomId: string) => Promise<void>;
 }
@@ -786,11 +786,12 @@ export const GroupProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return true;
   };
 
-  // 14. ADD PARTICIPANT TO SUBGROUP (Only unassigned participant)
+  // 14. ADD PARTICIPANT TO SUBGROUP (Supports unassigned participant & self-join)
   const addParticipantToSubGroup = async (
     roomId: string,
     subGroupId: string,
-    participantUid: string
+    participantUid: string,
+    userProfile?: UserProfile
   ): Promise<{ success: boolean; error?: string }> => {
     try {
       let room = rooms.find(r => r.id === roomId);
@@ -812,15 +813,39 @@ export const GroupProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return { success: false, error: 'Kelompok tujuan tidak ditemukan.' };
       }
 
-      const participant = room.participants.find(p => p.uid === participantUid);
+      // 1. Find participant in room.participants by uid, email, or identifier
+      let participant = (room.participants || []).find(
+        p => p.uid === participantUid ||
+             (userProfile && p.email && userProfile.email && p.email.toLowerCase() === userProfile.email.toLowerCase()) ||
+             (userProfile && p.identifier && userProfile.identifier && p.identifier === userProfile.identifier)
+      );
+
+      // 2. If participant is not yet in room.participants, create them from userProfile
       if (!participant) {
-        message.error('Peserta tidak terdaftar di dalam grup ini.');
-        return { success: false, error: 'Peserta tidak terdaftar di dalam grup ini.' };
+        if (userProfile) {
+          participant = {
+            uid: userProfile.uid || participantUid,
+            identifier: userProfile.identifier || '',
+            fullName: userProfile.fullName,
+            email: userProfile.email,
+            avatarUrl: userProfile.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${userProfile.uid || participantUid}`,
+            subGroupId: null,
+            subGroupNumber: null,
+            joinedAt: new Date().toISOString(),
+          };
+        } else {
+          message.error('Data peserta tidak ditemukan.');
+          return { success: false, error: 'Data peserta tidak ditemukan.' };
+        }
       }
 
       // Safety check: Ensure participant is NOT already in ANY subgroup
       const isAlreadyAssigned = room.subGroups.some(sg =>
-        sg.members.some(m => m.uid === participantUid || (m.identifier && participant.identifier && m.identifier === participant.identifier))
+        sg.members.some(m => 
+          m.uid === participant.uid || 
+          (m.email && participant.email && m.email.toLowerCase() === participant.email.toLowerCase()) ||
+          (m.identifier && participant.identifier && m.identifier === participant.identifier)
+        )
       );
 
       if (isAlreadyAssigned) {
@@ -830,6 +855,7 @@ export const GroupProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
       const updatedParticipant: Participant = {
         ...participant,
+        uid: participantUid,
         subGroupId: targetGroup.id,
         subGroupNumber: targetGroup.groupNumber,
       };
@@ -844,12 +870,20 @@ export const GroupProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return sg;
       });
 
-      const updatedParticipants = room.participants.map(p => {
-        if (p.uid === participantUid) {
-          return updatedParticipant;
-        }
-        return p;
-      });
+      // Update or add participant in room.participants
+      const participantsList = room.participants || [];
+      const existingIndex = participantsList.findIndex(
+        p => p.uid === participantUid || 
+             (p.email && updatedParticipant.email && p.email.toLowerCase() === updatedParticipant.email.toLowerCase())
+      );
+
+      let updatedParticipants: Participant[];
+      if (existingIndex >= 0) {
+        updatedParticipants = [...participantsList];
+        updatedParticipants[existingIndex] = updatedParticipant;
+      } else {
+        updatedParticipants = [...participantsList, updatedParticipant];
+      }
 
       const updatedRoom: Room = {
         ...room,
@@ -864,11 +898,11 @@ export const GroupProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         await setDoc(doc(db, 'rooms', roomId), updatedRoom).catch(console.warn);
       }
 
-      message.success(`${participant.fullName} berhasil ditambahkan ke ${targetGroup.name}!`);
+      message.success(`${participant.fullName} berhasil bergabung ke ${targetGroup.name}!`);
       return { success: true };
     } catch (err: any) {
       console.error('Error adding participant to subgroup:', err);
-      const errMsg = err.message || 'Gagal menambahkan peserta ke kelompok.';
+      const errMsg = err.message || 'Gagal bergabung ke kelompok.';
       message.error(errMsg);
       return { success: false, error: errMsg };
     }

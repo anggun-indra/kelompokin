@@ -98,7 +98,7 @@ export const MyGroupCard: React.FC<MyGroupCardProps> = ({ activeRoom }) => {
     if (!activeRoom || !user) return;
     setJoiningSubGroupId(subGroupId);
     try {
-      const res = await addParticipantToSubGroup(activeRoom.id, subGroupId, user.uid);
+      const res = await addParticipantToSubGroup(activeRoom.id, subGroupId, user.uid, user);
       if (res.success) {
         confetti({
           particleCount: 80,

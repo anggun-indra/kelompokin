@@ -21,7 +21,7 @@ export const AllGroupsOverview: React.FC<AllGroupsOverviewProps> = ({ room, mySu
     if (!room || !user) return;
     setJoiningSubGroupId(subGroupId);
     try {
-      const res = await addParticipantToSubGroup(room.id, subGroupId, user.uid);
+      const res = await addParticipantToSubGroup(room.id, subGroupId, user.uid, user);
       if (res.success) {
         confetti({
           particleCount: 80,
