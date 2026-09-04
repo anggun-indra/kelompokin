@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
 import { Room } from '@/types';
-import { Layers, Search } from 'lucide-react';
-import { Input } from 'antd';
+import { useAuth } from '@/contexts/AuthContext';
+import { useGroup } from '@/contexts/GroupContext';
+import { Layers, Search, UserPlus } from 'lucide-react';
+import { Input, Button, Popconfirm } from 'antd';
+import confetti from 'canvas-confetti';
 
 interface AllGroupsOverviewProps {
   room: Room | null;
@@ -9,7 +12,27 @@ interface AllGroupsOverviewProps {
 }
 
 export const AllGroupsOverview: React.FC<AllGroupsOverviewProps> = ({ room, mySubGroupId }) => {
+  const { user } = useAuth();
+  const { addParticipantToSubGroup } = useGroup();
   const [searchQuery, setSearchQuery] = useState('');
+  const [joiningSubGroupId, setJoiningSubGroupId] = useState<string | null>(null);
+
+  const handleSelfJoinGroup = async (subGroupId: string) => {
+    if (!room || !user) return;
+    setJoiningSubGroupId(subGroupId);
+    try {
+      const res = await addParticipantToSubGroup(room.id, subGroupId, user.uid);
+      if (res.success) {
+        confetti({
+          particleCount: 80,
+          spread: 70,
+          origin: { y: 0.6 }
+        });
+      }
+    } finally {
+      setJoiningSubGroupId(null);
+    }
+  };
 
   if (!room) {
     return (
@@ -54,6 +77,17 @@ export const AllGroupsOverview: React.FC<AllGroupsOverviewProps> = ({ room, mySu
           />
         </div>
       </div>
+
+      {!mySubGroupId && user && (
+        <div className="p-3.5 sm:p-4 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-900 flex items-center justify-between text-xs">
+          <div className="flex items-center space-x-2">
+            <UserPlus className="w-4 h-4 text-indigo-700 flex-shrink-0" />
+            <span>
+              <strong>Pilih Kelompok:</strong> Anda belum memiliki kelompok. Klik tombol <strong>Gabung</strong> pada kelompok yang ingin Anda tuju di bawah ini.
+            </span>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
         {filteredSubGroups.map((grp) => {
@@ -121,6 +155,31 @@ export const AllGroupsOverview: React.FC<AllGroupsOverviewProps> = ({ room, mySu
                   ))
                 )}
               </div>
+
+              {/* Action Button for Unassigned User */}
+              {!mySubGroupId && user && (
+                <div className="p-2.5 bg-slate-50 border-t border-slate-100">
+                  <Popconfirm
+                    title={`Gabung ke ${grp.name}?`}
+                    description={`Anda akan terdaftar sebagai anggota ${grp.name}. Konfirmasi?`}
+                    onConfirm={() => handleSelfJoinGroup(grp.id)}
+                    okText="Ya, Gabung"
+                    cancelText="Batal"
+                    okButtonProps={{ loading: joiningSubGroupId === grp.id }}
+                  >
+                    <Button
+                      type="primary"
+                      size="small"
+                      loading={joiningSubGroupId === grp.id}
+                      disabled={Boolean(joiningSubGroupId)}
+                      className="w-full rounded-xl font-bold text-xs h-8 bg-indigo-700 hover:bg-indigo-800 border-0 flex items-center justify-center space-x-1.5 text-white"
+                    >
+                      <UserPlus className="w-3.5 h-3.5" />
+                      <span>Gabung ke {grp.name}</span>
+                    </Button>
+                  </Popconfirm>
+                </div>
+              )}
             </div>
           );
         })}

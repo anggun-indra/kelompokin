@@ -12,7 +12,8 @@ import {
   LogIn,
   UserPlus
 } from 'lucide-react';
-import { Button, message } from 'antd';
+import { Button, message, Popconfirm } from 'antd';
+import confetti from 'canvas-confetti';
 import { CreateSwapCodeModal } from '@/components/modals/CreateSwapCodeModal';
 import { EnterSwapCodeModal } from '@/components/modals/EnterSwapCodeModal';
 import { JoinRoomModal } from '@/components/modals/JoinRoomModal';
@@ -25,12 +26,13 @@ interface MyGroupCardProps {
 
 export const MyGroupCard: React.FC<MyGroupCardProps> = ({ activeRoom }) => {
   const { user } = useAuth();
-  const { swapCodes, cancelSwapCode } = useGroup();
+  const { swapCodes, cancelSwapCode, addParticipantToSubGroup } = useGroup();
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEnterOpen, setIsEnterOpen] = useState(false);
   const [isJoinOpen, setIsJoinOpen] = useState(false);
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
+  const [joiningSubGroupId, setJoiningSubGroupId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   if (!user) return null;
@@ -90,6 +92,23 @@ export const MyGroupCard: React.FC<MyGroupCardProps> = ({ activeRoom }) => {
     setCopied(true);
     message.success('Kode pertukaran disalin!');
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleSelfJoinGroup = async (subGroupId: string) => {
+    if (!activeRoom || !user) return;
+    setJoiningSubGroupId(subGroupId);
+    try {
+      const res = await addParticipantToSubGroup(activeRoom.id, subGroupId, user.uid);
+      if (res.success) {
+        confetti({
+          particleCount: 80,
+          spread: 70,
+          origin: { y: 0.6 }
+        });
+      }
+    } finally {
+      setJoiningSubGroupId(null);
+    }
   };
 
   return (
@@ -236,6 +255,123 @@ export const MyGroupCard: React.FC<MyGroupCardProps> = ({ activeRoom }) => {
                 currentUserUid={user.uid}
                 currentUserIdentifier={user.identifier}
               />
+            </div>
+          </div>
+        ) : activeRoom.subGroups && activeRoom.subGroups.length > 0 ? (
+          /* Newly joined participant: Can choose which group to join */
+          <div className="space-y-4 sm:space-y-6">
+            {/* Header info banner */}
+            <div className="p-4 sm:p-6 rounded-2xl bg-indigo-700 text-white shadow-sm space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] sm:text-[11px] font-bold uppercase tracking-wider bg-white/20 text-white mb-1.5">
+                    Peserta Baru / Belum Ada Kelompok
+                  </span>
+                  <h2 className="text-xl sm:text-2xl font-black text-white">
+                    Pilih Kelompok Anda
+                  </h2>
+                  <p className="text-xs sm:text-sm text-white/80 mt-1 max-w-xl">
+                    Anda sudah terdaftar di grup <strong>{activeRoom.name}</strong>. Silakan pilih kelompok yang ingin Anda tuju di bawah ini untuk langsung bergabung, atau Anda juga dapat menunggu Admin mengacak / rekan menambahkan Anda.
+                  </p>
+                </div>
+                <div className="px-3 sm:px-4 py-2 rounded-xl bg-white/10 border border-white/20 text-center flex-shrink-0 self-start sm:self-auto">
+                  <div className="text-xl sm:text-2xl font-black leading-tight text-white">
+                    {activeRoom.subGroups.length}
+                  </div>
+                  <div className="text-[9px] sm:text-[10px] uppercase font-bold tracking-wider text-white/80">
+                    Pilihan Kelompok
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Subgroups Selection Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+              {activeRoom.subGroups.map((grp) => {
+                const isJoiningThis = joiningSubGroupId === grp.id;
+
+                return (
+                  <div
+                    key={grp.id}
+                    className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm flex flex-col justify-between hover:border-indigo-500 hover:shadow-md transition-all group"
+                  >
+                    {/* Header */}
+                    <div className="p-3.5 sm:p-4 bg-slate-900 text-white space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-extrabold text-sm tracking-tight text-white">
+                          {grp.name}
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-white/20 text-white font-mono text-xs font-bold">
+                          {grp.members.length} Orang
+                        </span>
+                      </div>
+                      {grp.topic && (
+                        <p className="text-[11px] text-white/80 flex items-center font-medium line-clamp-1 pt-0.5">
+                          <BookOpen className="w-3 h-3 mr-1 flex-shrink-0" />
+                          <span className="truncate">{grp.topic}</span>
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Members preview */}
+                    <div className="p-3 sm:p-4 divide-y divide-slate-100 flex-1 space-y-1.5 min-h-[100px]">
+                      {grp.members.length === 0 ? (
+                        <div className="text-center py-6 text-xs text-slate-400 italic">
+                          Belum ada anggota di kelompok ini.
+                        </div>
+                      ) : (
+                        grp.members.map((member, i) => (
+                          <div
+                            key={member.uid || member.identifier || i}
+                            className="pt-1.5 first:pt-0 flex items-center space-x-2 text-xs"
+                          >
+                            <img
+                              src={
+                                member.avatarUrl ||
+                                `https://api.dicebear.com/7.x/avataaars/svg?seed=${member.uid}`
+                              }
+                              alt={member.fullName}
+                              className="w-5 h-5 rounded-md bg-slate-200 object-cover flex-shrink-0"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <span className="font-bold text-slate-800 truncate block">
+                                {member.fullName}
+                              </span>
+                            </div>
+                            {member.identifier && (
+                              <span className="text-[10px] font-mono text-slate-400">
+                                {member.identifier}
+                              </span>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    {/* Choose Action Button */}
+                    <div className="p-3 bg-slate-50 border-t border-slate-100">
+                      <Popconfirm
+                        title={`Gabung ke ${grp.name}?`}
+                        description={`Anda akan terdaftar sebagai anggota ${grp.name}. Konfirmasi?`}
+                        onConfirm={() => handleSelfJoinGroup(grp.id)}
+                        okText="Ya, Gabung"
+                        cancelText="Batal"
+                        okButtonProps={{ loading: isJoiningThis }}
+                      >
+                        <Button
+                          type="primary"
+                          loading={isJoiningThis}
+                          disabled={Boolean(joiningSubGroupId)}
+                          className="w-full rounded-xl font-bold text-xs h-9 bg-indigo-700 hover:bg-indigo-800 border-0 flex items-center justify-center space-x-1.5 text-white shadow-sm"
+                        >
+                          <UserPlus className="w-3.5 h-3.5" />
+                          <span>Gabung ke {grp.name}</span>
+                        </Button>
+                      </Popconfirm>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         ) : (
