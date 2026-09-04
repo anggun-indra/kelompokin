@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Modal, Input, Button, Popconfirm, Tooltip } from 'antd';
+import { Modal, Input, Button, Popconfirm, Tooltip, Select } from 'antd';
 import { Room } from '@/types';
 import { useGroup } from '@/contexts/GroupContext';
 import { Users, Search, UserMinus, Trash2 } from 'lucide-react';
@@ -11,9 +11,10 @@ interface ParticipantsModalProps {
 }
 
 export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({ open, onClose, room }) => {
-  const { removeParticipant, kickAllParticipants } = useGroup();
+  const { removeParticipant, kickAllParticipants, addParticipantToSubGroup } = useGroup();
   const [search, setSearch] = useState('');
   const [removingUid, setRemovingUid] = useState<string | null>(null);
+  const [assigningUid, setAssigningUid] = useState<string | null>(null);
 
   const getSubGroupName = (uid: string) => {
     for (const sg of room.subGroups) {
@@ -127,13 +128,37 @@ export const ParticipantsModal: React.FC<ParticipantsModalProps> = ({ open, onCl
                   </div>
 
                   <div className="flex items-center space-x-2 flex-shrink-0">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                      groupName !== 'Belum Diacak'
-                        ? 'bg-indigo-50 text-indigo-800 border border-indigo-200'
-                        : 'bg-slate-100 text-slate-500'
-                    }`}>
-                      {groupName}
-                    </span>
+                    {groupName === 'Belum Diacak' && room.subGroups.length > 0 ? (
+                      <Select
+                        size="small"
+                        placeholder="+ Pilih Kelompok"
+                        className="w-36 text-[10px]"
+                        loading={assigningUid === p.uid}
+                        disabled={Boolean(assigningUid)}
+                        value={undefined}
+                        onChange={async (subGroupId: string) => {
+                          if (!subGroupId) return;
+                          setAssigningUid(p.uid);
+                          try {
+                            await addParticipantToSubGroup(room.id, subGroupId, p.uid);
+                          } finally {
+                            setAssigningUid(null);
+                          }
+                        }}
+                        options={room.subGroups.map((sg) => ({
+                          value: sg.id,
+                          label: `${sg.name} (${sg.members.length})`,
+                        }))}
+                      />
+                    ) : (
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                        groupName !== 'Belum Diacak'
+                          ? 'bg-indigo-50 text-indigo-800 border border-indigo-200'
+                          : 'bg-slate-100 text-slate-500'
+                      }`}>
+                        {groupName}
+                      </span>
+                    )}
 
                     <Popconfirm
                       title="Keluarkan Peserta?"

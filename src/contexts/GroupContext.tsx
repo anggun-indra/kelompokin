@@ -40,6 +40,7 @@ interface GroupContextType {
   executeSwapWithCode: (roomId: string, codeStr: string, user: UserProfile) => Promise<{ success: boolean; error?: string; message?: string }>;
   updateSubGroupTopic: (roomId: string, subGroupId: string, topic: string) => Promise<void>;
   manualMoveParticipant: (roomId: string, participantUid: string, fromSubGroupId: string, toSubGroupId: string) => Promise<boolean>;
+  addParticipantToSubGroup: (roomId: string, subGroupId: string, participantUid: string) => Promise<{ success: boolean; error?: string }>;
   exportRoomToExcel: (room: Room) => void;
   resetRoomGroups: (roomId: string) => Promise<void>;
 }
@@ -785,7 +786,95 @@ export const GroupProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return true;
   };
 
-  // 14. EXPORT TO EXCEL
+  // 14. ADD PARTICIPANT TO SUBGROUP (Only unassigned participant)
+  const addParticipantToSubGroup = async (
+    roomId: string,
+    subGroupId: string,
+    participantUid: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      let room = rooms.find(r => r.id === roomId);
+      if (db && db.app) {
+        const snap = await getDoc(doc(db, 'rooms', roomId)).catch(() => null);
+        if (snap && snap.exists()) {
+          room = snap.data() as Room;
+        }
+      }
+
+      if (!room) {
+        message.error('Grup tidak ditemukan.');
+        return { success: false, error: 'Grup tidak ditemukan.' };
+      }
+
+      const targetGroup = room.subGroups.find(g => g.id === subGroupId);
+      if (!targetGroup) {
+        message.error('Kelompok tujuan tidak ditemukan.');
+        return { success: false, error: 'Kelompok tujuan tidak ditemukan.' };
+      }
+
+      const participant = room.participants.find(p => p.uid === participantUid);
+      if (!participant) {
+        message.error('Peserta tidak terdaftar di dalam grup ini.');
+        return { success: false, error: 'Peserta tidak terdaftar di dalam grup ini.' };
+      }
+
+      // Safety check: Ensure participant is NOT already in ANY subgroup
+      const isAlreadyAssigned = room.subGroups.some(sg =>
+        sg.members.some(m => m.uid === participantUid || (m.identifier && participant.identifier && m.identifier === participant.identifier))
+      );
+
+      if (isAlreadyAssigned) {
+        message.error('Peserta ini sudah tergabung dalam kelompok lain.');
+        return { success: false, error: 'Peserta ini sudah tergabung dalam kelompok lain.' };
+      }
+
+      const updatedParticipant: Participant = {
+        ...participant,
+        subGroupId: targetGroup.id,
+        subGroupNumber: targetGroup.groupNumber,
+      };
+
+      const updatedSubGroups = room.subGroups.map(sg => {
+        if (sg.id === subGroupId) {
+          return {
+            ...sg,
+            members: [...sg.members, updatedParticipant],
+          };
+        }
+        return sg;
+      });
+
+      const updatedParticipants = room.participants.map(p => {
+        if (p.uid === participantUid) {
+          return updatedParticipant;
+        }
+        return p;
+      });
+
+      const updatedRoom: Room = {
+        ...room,
+        subGroups: updatedSubGroups,
+        participants: updatedParticipants,
+        updatedAt: new Date().toISOString(),
+      };
+
+      setRooms(prev => prev.map(r => r.id === roomId ? updatedRoom : r));
+
+      if (db && db.app) {
+        await setDoc(doc(db, 'rooms', roomId), updatedRoom).catch(console.warn);
+      }
+
+      message.success(`${participant.fullName} berhasil ditambahkan ke ${targetGroup.name}!`);
+      return { success: true };
+    } catch (err: any) {
+      console.error('Error adding participant to subgroup:', err);
+      const errMsg = err.message || 'Gagal menambahkan peserta ke kelompok.';
+      message.error(errMsg);
+      return { success: false, error: errMsg };
+    }
+  };
+
+  // 15. EXPORT TO EXCEL
   const exportRoomToExcel = (room: Room) => {
     try {
       const rows: any[] = [];
@@ -873,6 +962,7 @@ export const GroupProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         executeSwapWithCode,
         updateSubGroupTopic,
         manualMoveParticipant,
+        addParticipantToSubGroup,
         exportRoomToExcel,
         resetRoomGroups,
       }}

@@ -9,12 +9,14 @@ import {
   Copy, 
   Check, 
   BookOpen, 
-  LogIn
+  LogIn,
+  UserPlus
 } from 'lucide-react';
 import { Button, message } from 'antd';
 import { CreateSwapCodeModal } from '@/components/modals/CreateSwapCodeModal';
 import { EnterSwapCodeModal } from '@/components/modals/EnterSwapCodeModal';
 import { JoinRoomModal } from '@/components/modals/JoinRoomModal';
+import { AddMemberToGroupModal } from '@/components/modals/AddMemberToGroupModal';
 import { GroupMembersList } from './GroupMembersList';
 
 interface MyGroupCardProps {
@@ -28,6 +30,7 @@ export const MyGroupCard: React.FC<MyGroupCardProps> = ({ activeRoom }) => {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEnterOpen, setIsEnterOpen] = useState(false);
   const [isJoinOpen, setIsJoinOpen] = useState(false);
+  const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
   if (!user) return null;
@@ -64,6 +67,18 @@ export const MyGroupCard: React.FC<MyGroupCardProps> = ({ activeRoom }) => {
   const mySubGroup = activeRoom.subGroups.find(sg =>
     sg.members.some(m => m.uid === user.uid || (m.identifier && m.identifier === user.identifier))
   ) || null;
+
+  // Count unassigned participants in the room
+  const unassignedCount = React.useMemo(() => {
+    if (!activeRoom) return 0;
+    const assigned = new Set<string>();
+    activeRoom.subGroups.forEach((sg) => {
+      (sg.members || []).forEach((m) => {
+        if (m.uid) assigned.add(m.uid);
+      });
+    });
+    return (activeRoom.participants || []).filter((p) => !assigned.has(p.uid)).length;
+  }, [activeRoom]);
 
   const now = Date.now();
   const activeCode: SwapCode | undefined = swapCodes.find(
@@ -180,13 +195,26 @@ export const MyGroupCard: React.FC<MyGroupCardProps> = ({ activeRoom }) => {
                   </h3>
                 </div>
 
-                {/* Actions (Mobile 2-column grid) */}
-                <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:space-x-2">
+                {/* Actions */}
+                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                  <Button
+                    onClick={() => setIsAddMemberOpen(true)}
+                    className="rounded-xl font-bold text-xs h-9 sm:h-10 px-3.5 bg-emerald-600 hover:bg-emerald-700 text-white border-0 flex items-center justify-center space-x-1.5 shadow-sm flex-1 sm:flex-initial"
+                  >
+                    <UserPlus className="w-3.5 h-3.5" />
+                    <span>Tambah Anggota</span>
+                    {unassignedCount > 0 && (
+                      <span className="ml-1 px-1.5 py-0.5 bg-emerald-800/40 text-white rounded-full text-[10px] font-bold">
+                        {unassignedCount}
+                      </span>
+                    )}
+                  </Button>
+
                   <Button
                     type="primary"
                     disabled={!activeRoom.isSwapAllowed}
                     onClick={() => setIsCreateOpen(true)}
-                    className="rounded-xl font-bold text-xs h-9 sm:h-10 px-3 bg-indigo-700 hover:bg-indigo-800 border-0 flex items-center justify-center space-x-1.5 text-white"
+                    className="rounded-xl font-bold text-xs h-9 sm:h-10 px-3 bg-indigo-700 hover:bg-indigo-800 border-0 flex items-center justify-center space-x-1.5 text-white flex-1 sm:flex-initial"
                   >
                     <ArrowLeftRight className="w-3.5 h-3.5" />
                     <span>Ajukan Tukar</span>
@@ -195,7 +223,7 @@ export const MyGroupCard: React.FC<MyGroupCardProps> = ({ activeRoom }) => {
                   <Button
                     disabled={!activeRoom.isSwapAllowed}
                     onClick={() => setIsEnterOpen(true)}
-                    className="rounded-xl font-bold text-xs h-9 sm:h-10 px-3 border-slate-300 text-slate-700 flex items-center justify-center space-x-1.5"
+                    className="rounded-xl font-bold text-xs h-9 sm:h-10 px-3 border-slate-300 text-slate-700 flex items-center justify-center space-x-1.5 flex-1 sm:flex-initial"
                   >
                     <KeyRound className="w-3.5 h-3.5 text-indigo-700" />
                     <span>Tukar Kode</span>
@@ -211,17 +239,17 @@ export const MyGroupCard: React.FC<MyGroupCardProps> = ({ activeRoom }) => {
             </div>
           </div>
         ) : (
-          /* Waiting for shuffle */
+          /* Waiting for placement */
           <div className="p-6 sm:p-12 rounded-2xl bg-white border border-slate-200 text-center space-y-4 shadow-sm">
             <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-slate-100 text-slate-600 mx-auto flex items-center justify-center">
               <Users className="w-6 h-6 sm:w-7 sm:h-7" />
             </div>
             <div className="max-w-md mx-auto space-y-2">
               <h2 className="text-xl sm:text-2xl font-black text-slate-900">
-                Menunggu Pengacakan oleh Admin
+                Menunggu Penempatan Kelompok
               </h2>
               <p className="text-xs text-slate-500 leading-relaxed">
-                Anda sudah terdaftar di grup <strong>{activeRoom.name}</strong>. Saat Admin menjalankan pengacakan kelompok, posisi Anda akan langsung muncul di sini secara realtime.
+                Anda sudah terdaftar di grup <strong>{activeRoom.name}</strong>. Saat Admin menjalankan pengacakan kelompok atau rekan kelompok menambahkan Anda, posisi Anda akan langsung muncul di sini secara realtime.
               </p>
             </div>
           </div>
@@ -230,6 +258,13 @@ export const MyGroupCard: React.FC<MyGroupCardProps> = ({ activeRoom }) => {
 
       {mySubGroup && (
         <>
+          <AddMemberToGroupModal
+            open={isAddMemberOpen}
+            onClose={() => setIsAddMemberOpen(false)}
+            room={activeRoom}
+            subGroup={mySubGroup}
+          />
+
           <CreateSwapCodeModal
             open={isCreateOpen}
             onClose={() => setIsCreateOpen(false)}

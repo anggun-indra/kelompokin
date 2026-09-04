@@ -7,9 +7,11 @@ import {
   Check, 
   BookOpen, 
   MoveRight,
-  UserMinus
+  UserMinus,
+  UserPlus
 } from 'lucide-react';
 import { Input, Button, Modal, Select, Popconfirm, Tooltip } from 'antd';
+import { AddMemberToGroupModal } from '@/components/modals/AddMemberToGroupModal';
 
 export const GroupLiveBoard: React.FC = () => {
   const { activeRoom, updateSubGroupTopic, manualMoveParticipant, removeParticipant } = useGroup();
@@ -24,6 +26,7 @@ export const GroupLiveBoard: React.FC = () => {
   } | null>(null);
   const [targetSubGroupId, setTargetSubGroupId] = useState<string>('');
   const [removingUid, setRemovingUid] = useState<string | null>(null);
+  const [addingToGroup, setAddingToGroup] = useState<SubGroup | null>(null);
 
   if (!activeRoom) return null;
 
@@ -193,6 +196,19 @@ export const GroupLiveBoard: React.FC = () => {
                   ))
                 )}
               </div>
+
+              {/* Add Member Button for Admin */}
+              <div className="p-2.5 bg-slate-50 border-t border-slate-100">
+                <Button
+                  type="dashed"
+                  size="small"
+                  onClick={() => setAddingToGroup(grp)}
+                  className="w-full rounded-xl text-xs font-bold text-emerald-700 border-emerald-300 hover:border-emerald-500 hover:bg-emerald-50 flex items-center justify-center space-x-1.5 h-8"
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  <span>+ Tambah Anggota</span>
+                </Button>
+              </div>
             </div>
           ))}
         </div>
@@ -236,6 +252,15 @@ export const GroupLiveBoard: React.FC = () => {
             </div>
           </div>
         </Modal>
+      )}
+
+      {addingToGroup && (
+        <AddMemberToGroupModal
+          open={Boolean(addingToGroup)}
+          onClose={() => setAddingToGroup(null)}
+          room={activeRoom}
+          subGroup={addingToGroup}
+        />
       )}
     </>
   );
